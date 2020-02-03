@@ -3,6 +3,15 @@
 ## 1. About STT
 
 Speculative taint tracking (STT) is a hardware defense mechanism for blocking all types of speculative execution attacks in modern processors. All details can be found in our MICRO'19 paper [here](dl.acm.org/citation.cfm?id=3358274). Here is a sample format for citing our work:
+```
+@inproceedings{yu2019stt,
+  title={Speculative Taint Tracking (STT) A Comprehensive Protection for Speculatively Accessed Data},
+  author={Yu, Jiyong and Yan, Mengjia and Khyzha, Artem and Morrison, Adam and Torrellas, Josep and Fletcher, Christopher W},
+  booktitle={Proceedings of the 52nd Annual IEEE/ACM International Symposium on Microarchitecture},
+  pages={954--968},
+  year={2019}
+}
+```
 
 ## 2. Implementation
 
