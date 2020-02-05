@@ -15,7 +15,7 @@ Speculative taint tracking (STT) is a hardware defense mechanism for blocking al
 
 ## 2. Implementation
 
-We implement STT using Gem5 simulator. To make the simulation close to a commodity processor, we use Gem5's o3 processor. The major changes are:
+We implement STT using Gem5 simulator. This is built on an early version of Gem5 (commit:38a1e23). To make the simulation close to a commodity processor, we use Gem5's o3 processor. The major changes are:
 
 * add taint tracking logic to track all tainted data
 * add delay logic for handling explicit channels (memory instructions)
