@@ -1592,7 +1592,8 @@ DefaultCommit<Impl>::markCompletedInsts()
 
     // [Jiyong, STT]
     // taint/untaint rob instructions
-    rob->compute_taint();
+    if (cpu->STT)
+        rob->compute_taint();
 }
 
 // [SafeSpec] update squash stat for loads
