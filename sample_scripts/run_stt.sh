@@ -10,10 +10,10 @@ EXE_PATH=
 OUT_DIR=$STT_PATH/output
 
 # gem5 configuration file
-CONFIG_FILE=$GSTT_PATH/configs/example/se.py
+CONFIG_FILE=$STT_PATH/configs/example/se.py
 
 
-$GEM5_PATH/build/X86_MESI_Two_Level/gem5.opt --outdir=$OUT_DIR \
+$STT_PATH/build/X86_MESI_Two_Level/gem5.opt --outdir=$OUT_DIR \
     $CONFIG_FILE \
     --num-cpus=1 --mem-size=4GB \
     --caches --l2cache --cpu-type=DerivO3CPU \
