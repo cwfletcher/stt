@@ -183,8 +183,8 @@ class BaseDynInst : public ExecContext, public RefCounted
         IsDestTainted,
         IsArgsTainted,
         IsAddrTainted,
+        IsSTLPublic,
         HasExplicitFlow,
-        HasImplicitFlow,
         HasPendingSquash,   // for branch/load, if a squash is postponed due to the tainted dependent operands
         MaxFlags
     };
@@ -396,11 +396,11 @@ class BaseDynInst : public ExecContext, public RefCounted
     bool isAddrTainted() const { return instFlags[IsAddrTainted]; }
     void isAddrTainted(bool f) { instFlags[IsAddrTainted] = f; }
 
+    bool isSTLPublic() const { return instFlags[IsSTLPublic]; }
+    void isSTLPublic(bool f) { instFlags[IsSTLPublic] = f; }
+
     bool hasExplicitFlow() const { return instFlags[HasExplicitFlow]; }
     void hasExplicitFlow(bool f) { instFlags[HasExplicitFlow] = f; }
-
-    bool hasImplicitFlow() const { return instFlags[HasImplicitFlow]; }
-    void hasImplicitFlow(bool f) { instFlags[HasImplicitFlow] = f; }
 
     bool hasPendingSquash() const { return instFlags[HasPendingSquash]; }
     void hasPendingSquash(bool f) { instFlags[HasPendingSquash] = f; }

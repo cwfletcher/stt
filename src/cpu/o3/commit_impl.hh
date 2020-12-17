@@ -911,45 +911,30 @@ DefaultCommit<Impl>::commit()
                 if (!cpu->impChannel) { // Ignore implicit channel
                     handleSquashSignalFromIEW(tid);
                 }
-                // Ignore
-                //else if (cpu->configImpFlow == 1) {  // Eager scheme
-                    //if (fromIEW->mispredictInst[tid]) { // a branch
-                        //// for branch squash, we can handle now, since we are tracking implicit flow
-                        //handleSquashSignalFromIEW(tid);
-                    //} else {  // a load
-                        //// we must delay the load squash if argsTainted
-                        //if (fromIEW->instCausingSquash[tid]->isArgsTainted()){
-                            //DPRINTF(Commit, "[tid:%i]: (Eager) A load mispredictInst [sn:%lli,0x%lx] PC %s is made pending.\n",
-                                    //tid,
-                                    //fromIEW->instCausingSquash[tid]->seqNum,
-                                    //fromIEW->instCausingSquash[tid]->seqNum,
-                                    //fromIEW->instCausingSquash[tid]->pcState());
-                            //fromIEW->instCausingSquash[tid]->hasPendingSquash(true);
-                            //++stalledMemoryViolations;
-                        //} else {
-                            //handleSquashSignalFromIEW(tid);
-                        //}
-                    //}
-                //}
                 else if (cpu->impChannel){  // Consider implicit channel
                     // we must delay both branch and load squash if argsTainted
-                    if (fromIEW->instCausingSquash[tid]->isArgsTainted()){
-                        if (fromIEW->mispredictInst[tid]) {
-                            DPRINTF(Commit, "[tid:%i]: (Lazy) A branch mispredicInst [sn:%lli,0x%lx] PC %s is made pending.\n",
+                    if (fromIEW->mispredictInst[tid]) { // branch
+                        if (fromIEW->instCausingSquash[tid]->isArgsTainted()) {
+                            DPRINTF(Commit, "[tid:%i]: Resolution caused by a branch mispredicInst [sn:%lli,0x%lx] PC %s is made pending.\n",
                                     tid,
                                     fromIEW->instCausingSquash[tid]->seqNum,
                                     fromIEW->instCausingSquash[tid]->seqNum,
                                     fromIEW->instCausingSquash[tid]->pcState());
                             ++stalledBranchMispredicts;
-                        } else {
-                            DPRINTF(Commit, "[tid:%i]: (Lazy) A load mispredictInst [sn:%lli,0x%lx] PC %s is made pending.\n", 
+                            fromIEW->instCausingSquash[tid]->hasPendingSquash(true);
+                        }
+                    }
+                    else { // load
+                        if (fromIEW->instCausingSquash[tid]->isAddrTainted() ||
+                            !fromIEW->instCausingSquash[tid]->isSTLPublic()) {
+                            DPRINTF(Commit, "[tid:%i]: Resolution caused by a load [sn:%lli,0x%lx] PC %s is made pending.\n", 
                                     tid,
                                     fromIEW->instCausingSquash[tid]->seqNum,
                                     fromIEW->instCausingSquash[tid]->seqNum,
                                     fromIEW->instCausingSquash[tid]->pcState());
                             ++stalledMemoryViolations;
+                            fromIEW->instCausingSquash[tid]->hasPendingSquash(true);
                         }
-                        fromIEW->instCausingSquash[tid]->hasPendingSquash(true);
                     } else {
                         handleSquashSignalFromIEW(tid);
                     }

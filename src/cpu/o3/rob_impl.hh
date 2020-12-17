@@ -463,27 +463,26 @@ ROB<Impl>::updateVisibleState()
         while (inst_it != tail_inst_it) {
             DynInstPtr inst = *inst_it++;
 
-            assert(inst!=0);
+            assert(inst);
 
-            if (!prevInstsComplete &&
-                    !prevBrsResolved) {
+            if (inst->isSquashed()) continue;
+
+            if (!prevInstsComplete && !prevBrsResolved) {
                 break;
             }
 
-            //if (inst->isLoad()) {
-                if (prevInstsComplete) {
-                    inst->setPrevInstsCompleted();
-                }
-                if (prevBrsResolved){
-                    inst->setPrevBrsResolved();
-                }
-                if (prevInstsCommitted) {
-                    inst->setPrevInstsCommitted();
-                }
-                if (prevBrsCommitted) {
-                    inst->setPrevBrsCommitted();
-                }
-            //}
+            if (prevInstsComplete) {
+                inst->setPrevInstsCompleted();
+            }
+            if (prevBrsResolved){
+                inst->setPrevBrsResolved();
+            }
+            if (prevInstsCommitted) {
+                inst->setPrevInstsCommitted();
+            }
+            if (prevBrsCommitted) {
+                inst->setPrevBrsCommitted();
+            }
 
             // Update prev control insts state
             if (inst->isControl()){
@@ -511,21 +510,10 @@ ROB<Impl>::updateVisibleState()
             }
 
             /*** [Jiyong, STT] add logic for updating flags when apply STT ***/
-            if (cpu->protectionEnabled && !cpu->isInvisibleSpec){
+            if (cpu->protectionEnabled) {
                 // fence
-                //if ((cpu->isFuturistic && inst->isPrevInstsCommitted()) ||
-                    //(!cpu->isFuturistic && inst->isPrevBrsCommitted())){
                 if ((cpu->isFuturistic && inst->isPrevInstsCompleted()) ||
                     (!cpu->isFuturistic && inst->isPrevBrsResolved())){
-                    inst->isUnsquashable(true);
-                } else {
-                    inst->isUnsquashable(false);
-                }
-            }
-            else if (cpu->protectionEnabled && cpu->isInvisibleSpec) {
-                // invisiSpec
-                if ((cpu->isFuturistic && inst->isPrevInstsCompleted()) ||
-                    (!cpu->isFuturistic && inst->isPrevBrsResolved())) {
                     inst->isUnsquashable(true);
                 } else {
                     inst->isUnsquashable(false);
@@ -706,32 +694,30 @@ ROB<Impl>::findInst(ThreadID tid, InstSeqNum squash_inst)
  */
 template <class Impl>
 void
-ROB<Impl>::explicit_flow(ThreadID tid, InstIt instIt)
+ROB<Impl>::checkArgTaint(ThreadID tid, DynInstPtr& inst)
 {
-    DynInstPtr inst = (*instIt);
     for (int i = 0; i < inst->numSrcRegs(); i++){
         if (inst->getArgProducer(i) != DynInstPtr()){
             DynInstPtr argProducer = inst->getArgProducer(i);
             assert(argProducer->threadNumber == tid);
             if (argProducer->isDestTainted()
                 && !argProducer->isCommitted()) {
-                inst->hasExplicitFlow(true);
+                inst->isArgsTainted(true);
                 return;
             }
         }
     }
-    inst->hasExplicitFlow(false);
-    return;
+    inst->isArgsTainted(false);
 }
 
 template <class Impl>
 void
-ROB<Impl>::address_flow(ThreadID tid, InstIt instIt)
+ROB<Impl>::checkAddrTaint(ThreadID tid, DynInstPtr& inst)
 {
-    DynInstPtr inst = (*instIt);
     if (inst->isMemRef()) {
         if (inst->isStore()) {
             for (int i = 1; i < inst->numSrcRegs(); i++){
+                if (i == 2) continue;
                 if (inst->getArgProducer(i) != DynInstPtr()){
                     DynInstPtr argProducer = inst->getArgProducer(i);
                     assert(argProducer->threadNumber == tid);
@@ -745,6 +731,7 @@ ROB<Impl>::address_flow(ThreadID tid, InstIt instIt)
         }
         else if (inst->isLoad()) {
             for (int i = 0; i < inst->numSrcRegs(); i++){
+                if (inst->numSrcRegs() == 4 && i == 2) continue;
                 if (inst->getArgProducer(i) != DynInstPtr()){
                     DynInstPtr argProducer = inst->getArgProducer(i);
                     assert(argProducer->threadNumber == tid);
@@ -770,24 +757,6 @@ ROB<Impl>::address_flow(ThreadID tid, InstIt instIt)
 
 template <class Impl>
 void
-ROB<Impl>::implicit_flow(ThreadID tid, InstIt instIt)
-{
-    DynInstPtr inst = (*instIt);
-    if (cpu->impChannel) {
-        for (auto prevInstIt = instList[tid].begin(); prevInstIt != instIt; prevInstIt++) {
-            DynInstPtr prevInst = (*prevInstIt);
-            if (prevInst->isControl() && prevInst->hasExplicitFlow()) {
-                inst->hasImplicitFlow(true);
-                return;
-            }
-        }
-    }
-    inst->hasImplicitFlow(false);
-    return;
-}
-
-template <class Impl>
-void
 ROB<Impl>::compute_taint()
 {
     assert (cpu->STT);
@@ -801,13 +770,9 @@ ROB<Impl>::compute_taint()
             continue;
 
         for (auto instIt = instList[tid].begin(); instIt != instList[tid].end(); instIt++) {
-            explicit_flow(tid, instIt);
-            implicit_flow(tid, instIt);
-            address_flow(tid, instIt);
             DynInstPtr inst = (*instIt);
-
-            inst->isArgsTainted(inst->hasExplicitFlow());
-
+            checkArgTaint(tid, inst);
+            checkAddrTaint(tid, inst);
             inst->isDestTainted(inst->isArgsTainted());
             if (inst->isAccess() && !inst->isUnsquashable()) {
                 inst->isDestTainted(true);
@@ -891,7 +856,8 @@ ROB<Impl>::getResolvedPendingSquashInst(ThreadID tid)
     for (auto instIt = instList[tid].begin(); instIt != instList[tid].end(); instIt++) {
         auto inst = (*instIt);
         if (inst->hasPendingSquash()
-            && !inst->isArgsTainted()
+            && ( (inst->isLoad() && !inst->AddrTainted() && inst->isSTLPublic())
+               || !inst->isArgsTainted() )
             && !inst->isSquashed()  // if it's already squashed, we ignore it
             ) {
             return inst;

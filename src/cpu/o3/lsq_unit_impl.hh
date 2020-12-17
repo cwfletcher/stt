@@ -992,30 +992,85 @@ LSQUnit<Impl>::writebackPendingStore()
     }
 }
 
+/*** [Jiyong,STT] update STLPublic tag for STT ***/
+template <class Impl>
+void
+LSQUnit<Impl>::updateSTLPublic()
+{
+    int load_idx = loadHead;
+    while (load_idx != loadTail && loadQueue[load_idx]) {
+        DynInstPtr loadInst = loadQueue[load_idx];
+        loadInst->isSTLPublic(checkSTLPublic(loadInst));
+        incrLdIdx(load_idx);
+    }
+}
 
+template <class Impl>
+bool
+LSQUnit<Impl>::checkSTLPublic(DynInstPtr& loadInst)
+{
+    if (loadInst->sqIdx == -1)
+        return true;
 
+    if (loadInst->isAddrTainted())
+        return false;
 
-// [SafeSpec] update FenceDelay State
-/*** [Jiyong,STT] update logic for STT ***/
+    int storeIdx = loadInst->stFwdIdx;
+    if (storeIdx == -1 ||
+        !storeQueue[storeIdx].inst ||
+        storeQueue[storeIdx].inst->seqNum != loadInst->stFwdSeqNum) {
+        storeIdx = storeHead;
+    }
+
+    int storeTailRot = storeTail - storeHead;
+    if (storeTailRot < 0)
+        storeTailRot += SQEntries;
+
+    int storeIdxRot = storeIdx - storeHead;
+    if (storeIdxRot < 0)
+        storeIdxRot += SQEntries;
+
+    if (storeIdxRot >= storeTailRot)
+        storeIdx = storeHead;
+
+    while (storeIdx != loadInst->sqIdx) {
+        auto currStoreInst = storeQueue[storeIdx].inst;
+        assert (currStoreIdx);
+
+        if (currStoreInst->isAddrTainted())
+            return false;
+
+        if (++storeIdx >= SQEntries)
+            storeIdx = 0;
+    }
+    return true;
+}
+
+/*** [Jiyong,STT] update delay tag for STT ***/
 template <class Impl>
 void
 LSQUnit<Impl>::updateVisibleState()
 {
+    // Iterate all the loads and update its fencedelay state accordingly
     int load_idx = loadHead;
-
-    //iterate all the loads and update its fencedelay state accordingly
     while (load_idx != loadTail && loadQueue[load_idx]){
         DynInstPtr inst = loadQueue[load_idx];
+
+        // Skip over executed or commited loads
+        if (inst->isExecuted() || inst->isCommitted()) {
+            incrLdIdx(load_idx);
+            continue;
+        }
 
         if (cpu->protectionEnabled && !cpu->isInvisibleSpec) {
             // fence (fenceDelay flag is effective)
             if (cpu->STT) {
-                inst->fenceDelay(inst->isArgsTainted());
+                // STT: delay === addr operands are tainted
+                inst->fenceDelay(inst->isAddrTainted());
             }
             else {
-                // !applySTT, if delay fence when fence is squashable
-                if ( (cpu->isFuturistic && inst->isPrevInstsCompleted()) || // (cpu->isFuturistic && inst->isPrevInstsCommitted()) ||
-                        (!cpu->isFuturistic && inst->isPrevBrsResolved())){ // (!cpu->isFuturistic && inst->isPrevBrsCommitted())){
+                // !STT: delay === squashable
+                if (inst->isUnsquashable()) {
                     // here prior instructions are committed so inst is unsquashable
                     if (inst->fenceDelay()){
                         DPRINTF(LSQUnit, "Clear virtual fence for "
@@ -1031,52 +1086,57 @@ LSQUnit<Impl>::updateVisibleState()
                     inst->fenceDelay(true);
                 }
             }
-            inst->readyToExpose(true);
-        } else if (cpu->protectionEnabled && cpu->isInvisibleSpec){
+        }
+        else if (cpu->protectionEnabled && cpu->isInvisibleSpec) {
             assert (0); // not supported
-            // invisiSpec (readyToExpose flag is effective)
-            if (cpu->STT) {  // apply STT
-                if (inst->needPostFetch() &&
-                    !inst->isArgsTainted() && !inst->readyToExpose())
-                    ;
-                    //++loadsToVLD;
-                else if (inst->isArgsTainted() && inst->readyToExpose()) {
-                    DPRINTF(LSQUnit, "The load can not be validated "
-                            "[sn:%lli] PC %s\n", inst->seqNum, inst->pcState());
-                    assert(0);
-                }
-                inst->readyToExpose(!inst->isArgsTainted());
-            } else { // !apply STT
-                if ( (cpu->isFuturistic && inst->isPrevInstsCompleted()) ||
-                        (!cpu->isFuturistic && inst->isPrevBrsResolved())) {
-                    if (!inst->readyToExpose()){
-                        DPRINTF(LSQUnit, "Set readyToExpose for "
-                                "inst [sn:%lli] PC %s\n", inst->seqNum, inst->pcState());
-                        if (inst->needPostFetch()){
-                            ;
-                            //++loadsToVLD;
-                        }
-                    }
-                    inst->readyToExpose(true);
-                } else {
-                    if (inst->readyToExpose()){
-                        DPRINTF(LSQUnit, "The load can not be validated "
-                                "[sn:%lli] PC %s\n", inst->seqNum, inst->pcState());
-                        assert(0);
-                        //--loadsToVLD;
-                    }
-                    inst->readyToExpose(false);
-                }
-            }
-            inst->fenceDelay(false);
-        } else {
+        }
+        else {
             // unsafe
-            inst->readyToExpose(true);
-            inst->isUnsquashable(true);
             inst->fenceDelay(false);
         }
 
         incrLdIdx(load_idx);
+    }
+
+    // Iterate all the stores and updates its fencedelay
+    int store_idx = storeHead;
+    while (store_idx != storeTail && storeQueue[store_idx].inst) {
+        DynInstPtr inst = storeQueue[store_idx].inst;
+
+        if (cpu->protectionEnabled && !cpu->isInvisibleSpec) {
+            // fence (fenceDelay flag is effective)
+            if (cpu->STT) {
+                // STT: delay === addr operands are tainted
+                inst->fenceDelay(inst->isAddrTainted());
+            }
+            else {
+                // !STT: delay === squashable
+                if (inst->isUnsquashable()) {
+                    // here prir instructions are committed so instructions is unsquashable 
+                    if (inst->fenceDelay()){
+                        DPRINTF(LSQUnit, "Clear virtual fence for "
+                                "inst [sn:%lli] PC %s\n", inst->seqNum, inst->pcState());
+                    }
+                    inst->fenceDelay(false);
+                } else {
+                    // here prior instructions are not committed so inst is squashable
+                    if (!inst->fenceDelay()){
+                        DPRINTF(LSQUnit, "Deffering an inst [sn:%lli] PC %s"
+                                " due to virtual fence\n",inst->seqNum, inst->pcState());
+                    }
+                    inst->fenceDelay(true);
+                }
+            }
+        }
+        else if (cpu->protectionEnabled && cpu->isInvisibleSpec) {
+            assert (0); // not supported
+        }
+        else {
+            // unsafe
+            inst->fenceDelay(false);
+        }
+
+        incrStIdx(store_idx);
     }
 }
 

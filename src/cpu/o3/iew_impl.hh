@@ -1289,6 +1289,14 @@ DefaultIEW<Impl>::executeInsts()
                     inst->fault = NoFault;
                 }
             } else if (inst->isStore()) {
+                if (inst->fenceDelay)() {
+                    DPRINTF(IEW, "Deferring store due to virtual fence.\n");
+                    inst->onlyWaitForFence(true);
+                    instQueue.deferMemInst(inst);
+
+                    continue;
+                }
+
                 fault = ldstQueue.executeStore(inst);
 
                 if (inst->isTranslationDelayed() &&
@@ -1519,6 +1527,7 @@ DefaultIEW<Impl>::tick()
     }
 
     ldstQueue.updateVisibleState();
+    ldstQueue.updateSTLPublic();
 
     if (exeStatus != Squashing) {
         executeInsts();

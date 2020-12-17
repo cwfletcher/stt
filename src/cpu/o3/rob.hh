@@ -317,11 +317,9 @@ class ROB
     /*** [Jiyong,STT] explicit flow and implicit flow logic ***/
     /*   they are private because they can only be called by compute_taint()  */
     // if this instr has explicit flow wrt its producers
-    void explicit_flow(ThreadID tid, InstIt instIt);
-    // if this instr has explicit flow w.r.t its preceding branches
-    void implicit_flow(ThreadID tid, InstIt instIt);
+    void checkArgTaint(ThreadID tid, DynInstPtr& inst);
     // if this instr has its address tainted(only for memory instructions)
-    void address_flow(ThreadID tid, InstIt instIt);
+    void checkAddrTaint(ThreadID tid, DynInstPtr& inst);
 
   public:
     /** Iterator pointing to the instruction which is the last instruction

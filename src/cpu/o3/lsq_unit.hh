@@ -170,6 +170,12 @@ class LSQUnit {
      * setup readyToExpose*/
     void updateVisibleState();
 
+    /** [jiyong] Update STLPublic State
+     * STLPublic == true if a store->load implicit flow
+     * leaks any tainted information */
+    void updateSTLPublic();
+    bool checkSTLPublic(DynInstPtr& loadInst);
+
     /** Completes the data access that has been returned from the
      * memory system. */
     void completeDataAccess(PacketPtr pkt);
@@ -552,7 +558,6 @@ class LSQUnit {
     Stats::Scalar numExposes;
     Stats::Scalar numConvertedExposes;
 
-
   public:
     void print_lsq() const;
 
@@ -574,7 +579,6 @@ class LSQUnit {
         } else {
             return 0;
         }
-
     }
 
     /** Returns the index of the head store instruction. */
@@ -733,7 +737,7 @@ LSQUnit<Impl>::read(Request *req, Request *sreqLow, Request *sreqHigh,
         if (store_has_lower_limit && store_has_upper_limit && !req->isLLSC()) {
             // we DO Forwarding
             /***** [Jiyong, STT] if store addr is tainted, load addr is untainted, we still needs to issue a normal load without writeback" **/
-            if (cpu->STT && cpu->impChannel && (storeQueue[store_idx].inst->isAddrTainted() && !load_inst->isAddrTainted())) {
+            if (cpu->STT && cpu->impChannel && isSTLPublic(load_inst)) {
                 /*
                  * here we do ld-st forwarding. But since store address is tainted, we also launch normal load afterwards
                  */
